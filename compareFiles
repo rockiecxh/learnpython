@@ -1,0 +1,235 @@
+#! /usr/bin/env python
+import os, sys, gzip, time, optparse, itertools, datetime, heapq, operator
+from operator import itemgetter
+from heapq import *
+
+parser = optparse.OptionParser()
+
+parser.add_option("-n", dest="max_num", default=10, type="int", help="maximum number of sample checks to collect", metavar="INT")
+parser.add_option("-c", dest="ccffile", help="cost file", metavar="FILE")
+parser.add_option("-p", dest="pcffile", help="price file", metavar="FILE")
+
+(options, paths) = parser.parse_args()
+#print options, paths
+
+usage="python test.py -c ccf.txt -p pcf.txt"
+
+def open_stream(path):
+    if path == "-":
+        stream = sys.stdin
+    elif path.endswith(".gz"):
+        stream = gzip.open(path)
+    else:
+        stream = open(path)
+    return stream
+
+class Cost(object):
+
+	def __init__(self, (line, text)):
+		self.line = line
+		self.text = text
+		(
+		self.sellableitemkey,
+		self.locationkey,
+		self.logisticalitemkey,
+		self.vendorkey,
+		self.primaryvendor,
+		self.vendorcaseconversionfactor,
+		self.effectivedate,
+		self.unititemcost,
+		self.useritemcost1,
+		self.useritemcost2,
+		self.useritemcost3,
+		self.reserved1,
+		self.reserved2
+		) = (part.strip() for part in self.text.split('|'))
+
+	def keys(self):
+		return "%s-%s" % (self.sellableitemkey, self.locationkey)
+
+	def key(self):
+			return self.sellableitemkey
+
+class Price(object):
+
+	def __init__(self, (line, text)):
+		self.line = line
+		self.text = text
+		(
+		self.sellableitemkey,
+		self.locationkey,
+		self.effectivedate,
+		self.unitbaseprice,
+		self.basepricemultiple,
+		self.iszoneexception,
+		self.isuserlocked,
+		self.attribute1value,
+		self.attribute2value,
+		self.attribute3value,
+		self.attribute4value,
+		self.attribute5value
+		) = (part.strip() for part in text.split('|'))
+
+	def keys(self):
+		return "%s-%s" % (self.sellableitemkey, self.locationkey)
+
+	def key(self):
+		return self.sellableitemkey
+
+def printSeparater(msg=''):
+	print
+	print msg
+	print "%s" % "-" * 80
+
+ccf={}
+ccf_prodloc={}
+pcf={}
+pcf_prodloc={}
+
+# Read cost file
+costfile = open_stream(options.ccffile)
+
+for cost in (itertools.imap(Cost, enumerate(costfile))):
+	ccf[cost.key()] = ccf.get(cost.key(), 0) + 1
+	ccf_prodloc[cost.keys()] = ccf_prodloc.get(cost.keys(), 0) + 1
+
+sorted_ccf = sorted(ccf.items(), key=operator.itemgetter(0))
+sorted_ccf_prodloc = sorted(ccf_prodloc.items(), key=operator.itemgetter(0))
+
+# Read price file
+pricefile = open_stream(options.pcffile)
+
+for price in (itertools.imap(Price, enumerate(pricefile))):
+	pcf[price.key()] = pcf.get(price.key(), 0) + 1
+	pcf_prodloc[price.keys()] = pcf_prodloc.get(price.keys(), 0) + 1
+
+sorted_pcf = sorted(pcf.items(), key=operator.itemgetter(0))
+sorted_pcf_prodloc = sorted(pcf_prodloc.items(), key=operator.itemgetter(0))
+
+def diffCostPrice(sortedCost, sortedPrice):
+	
+	iter_c = iter(sortedCost)
+	iter_p = iter(sortedPrice)
+
+	#diffCostPrice(iter_c, iter_p)
+
+	costonly=[]
+	priceonly=[]
+	inboth=[]
+
+	lengthlimit=options.max_num
+	costprod, priceprod = next(iter_c), next(iter_p)
+
+	def heappush(destHeap, item, limit=10):
+		if len(destHeap) >=limit:
+			heapq.heappushpop(destHeap, item)
+		else:
+			heapq.heappush(destHeap, item)
+
+	while costprod and priceprod:
+		if costprod[0] < priceprod[0]:
+			#print "Only exist in Cost file: %s" % str(costprod)
+			heappush(costonly,(costprod[1],costprod[0]),lengthlimit)
+			costprod = next(iter_c, None)
+		elif costprod[0] > priceprod[0]:
+			#print "Only exist in Price file: %s" % str(costprod)
+			heappush(priceonly,(priceprod[1],priceprod[0]),lengthlimit)
+			priceprod = next(iter_p, None)
+		else:
+			#print "%s In both and the difference is: %d" % (costprod[0], (costprod[1] - priceprod[1]))
+			heappush(inboth,((costprod[1] - priceprod[1]),costprod[0]),lengthlimit)
+			costprod, priceprod = next(iter_c, None), next(iter_p, None)
+
+	while costprod:
+		heappush(costonly,(costprod[1],costprod[0]),lengthlimit)
+		costprod = next(iter_c, None)
+			
+	while priceprod:
+		heappush(priceonly,(priceprod[1],priceprod[0]),lengthlimit)
+		#priceonly.append(priceprod)
+		priceprod = next(iter_p, None)
+			
+
+	printSeparater("Cost only:")
+	for (x, y) in sorted(costonly, key=itemgetter(0), reverse=True):
+		print "sellableitemkey: %s, diff count: %d" % (y, x)
+
+	printSeparater("Price only:")
+	for (x, y) in sorted(priceonly, key=itemgetter(0), reverse=True):
+		print "sellableitemkey: %s, diff count: %d" % (y, x)
+
+	printSeparater("In both:")
+	for (x, y) in sorted(inboth, key=itemgetter(0), reverse=True):
+		print "sellableitemkey: %s, diff count: %d" % (y, x)
+
+printSeparater("Going to compare the cost and price at product level...")
+
+diffCostPrice(sorted_ccf, sorted_pcf)
+
+
+printSeparater("Going to compare the cost and price at product/location level...")
+
+diffCostPrice(sorted_ccf_prodloc, sorted_pcf_prodloc)
+
+
+
+
+
+def main(options, paths, makeLine, sortingFields):
+    out_result = sys.stdout
+    out_valid = None
+    out_invalid = None
+
+    if options.filter:
+        out_result = sys.stderr
+        out_valid = sys.stdout
+        try: out_invalid = os.fdopen(3, 'w')
+        except: pass
+
+    timer = Timer();
+    progress = Progress(options, timer, out_result);
+    print>>out_result, "started at %s" % datetime.datetime.now()
+    print>>out_result
+
+    streams = ((path, open_stream(path, options.sorted, sortingFields)) for path in paths)
+    if options.parallel:
+        streams = list(streams)
+
+    for stream_num, (path, stream) in enumerate(streams):
+        print>>out_result, "%d: %s" % (stream_num, path)
+        progress.started()
+
+        for key, chunk in itertools.groupby(itertools.imap(makeLine, enumerate(stream)), lambda line: line.key()):
+            chunk = list(chunk) # freeze itertools._grouper so result can be reused
+            progress.advance(chunk[0].line, chunk[-1].line)
+            validation_error = False
+            for validation in validations:
+                try:
+                    validation(chunk)
+                except Exception, ex:
+                    validation.error = str(ex)
+                if validation.error:
+                    if len(validation.trace) <= options.trace_len:
+                        validation.trace.append((stream_num, chunk, validation.error))
+                    validation.error = False
+                    validation_error = True
+            out = [out_valid, out_invalid][validation_error]
+            if out:
+                for line in chunk:
+                    out.write(line.text)
+
+    for validation in validations:
+        validation.finalize(out_result)
+        if validation.trace:
+            for (num, (stream_num, chunk, error)) in enumerate(validation.trace):
+                if num == options.trace_len:
+                    print>>out_result, "..."
+                else:
+                    if type(error) is str:
+                        print>>out_result, error
+                    for line in chunk:
+                        print>>out_result, "%d-%d: %s" % (stream_num, line.line, line.text),
+
+    print>>out_result
+    print>>out_result, "completed at %s" % datetime.datetime.now()
+    print>>out_result, "completed in %.2fs" % timer.total()
