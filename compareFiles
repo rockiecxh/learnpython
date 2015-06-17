@@ -76,35 +76,32 @@ class Price(object):
 	def key(self):
 		return self.sellableitemkey
 
+class Timer(object):
+    def __init__(self):
+        self.t = time.clock()
+        self.s = self.t
+
+    def __call__(self):
+        t = time.clock()
+        d = t - self.t
+        self.t = t
+        return d
+
+    def total(self):
+        t = time.clock()
+        return t - self.s
+
 def printSeparater(msg=''):
 	print
 	print msg
 	print "%s" % "-" * 80
 
-ccf={}
-ccf_prodloc={}
-pcf={}
-pcf_prodloc={}
+def heappush(destHeap, item, limit=10):
+	if len(destHeap) >=limit:
+		heapq.heappushpop(destHeap, item)
+	else:
+		heapq.heappush(destHeap, item)
 
-# Read cost file
-costfile = open_stream(options.ccffile)
-
-for cost in (itertools.imap(Cost, enumerate(costfile))):
-	ccf[cost.key()] = ccf.get(cost.key(), 0) + 1
-	ccf_prodloc[cost.keys()] = ccf_prodloc.get(cost.keys(), 0) + 1
-
-sorted_ccf = sorted(ccf.items(), key=operator.itemgetter(0))
-sorted_ccf_prodloc = sorted(ccf_prodloc.items(), key=operator.itemgetter(0))
-
-# Read price file
-pricefile = open_stream(options.pcffile)
-
-for price in (itertools.imap(Price, enumerate(pricefile))):
-	pcf[price.key()] = pcf.get(price.key(), 0) + 1
-	pcf_prodloc[price.keys()] = pcf_prodloc.get(price.keys(), 0) + 1
-
-sorted_pcf = sorted(pcf.items(), key=operator.itemgetter(0))
-sorted_pcf_prodloc = sorted(pcf_prodloc.items(), key=operator.itemgetter(0))
 
 def diffCostPrice(sortedCost, sortedPrice):
 	
@@ -120,12 +117,7 @@ def diffCostPrice(sortedCost, sortedPrice):
 	lengthlimit=options.max_num
 	costprod, priceprod = next(iter_c), next(iter_p)
 
-	def heappush(destHeap, item, limit=10):
-		if len(destHeap) >=limit:
-			heapq.heappushpop(destHeap, item)
-		else:
-			heapq.heappush(destHeap, item)
-
+	printSeparater("Finding the top %d count keys..." % lengthlimit)
 	while costprod and priceprod:
 		if costprod[0] < priceprod[0]:
 			#print "Only exist in Cost file: %s" % str(costprod)
@@ -152,28 +144,62 @@ def diffCostPrice(sortedCost, sortedPrice):
 
 	printSeparater("Cost only:")
 	for (x, y) in sorted(costonly, key=itemgetter(0), reverse=True):
-		print "sellableitemkey: %s, diff count: %d" % (y, x)
+		print "key: %s, diff count: %d" % (y, x)
 
 	printSeparater("Price only:")
 	for (x, y) in sorted(priceonly, key=itemgetter(0), reverse=True):
-		print "sellableitemkey: %s, diff count: %d" % (y, x)
+		print "key: %s, diff count: %d" % (y, x)
 
 	printSeparater("In both:")
 	for (x, y) in sorted(inboth, key=itemgetter(0), reverse=True):
-		print "sellableitemkey: %s, diff count: %d" % (y, x)
+		print "key: %s, diff count: %d" % (y, x)
 
-printSeparater("Going to compare the cost and price at product level...")
 
+# main starts
+print "started at %s" % datetime.datetime.now()
+timer = Timer();
+
+ccf={}
+ccf_prodloc={}
+pcf={}
+pcf_prodloc={}
+
+# Read cost file
+costfile = open_stream(options.ccffile)
+
+printSeparater("Reading cost file...")
+for cost in (itertools.imap(Cost, enumerate(costfile))):
+	ccf[cost.key()] = ccf.get(cost.key(), 0) + 1
+	ccf_prodloc[cost.keys()] = ccf_prodloc.get(cost.keys(), 0) + 1
+
+printSeparater("Sorting cost count result...")
+
+sorted_ccf = sorted(ccf.items(), key=operator.itemgetter(0))
+sorted_ccf_prodloc = sorted(ccf_prodloc.items(), key=operator.itemgetter(0))
+
+# Read price file
+pricefile = open_stream(options.pcffile)
+
+printSeparater("Reading price file...")
+for price in (itertools.imap(Price, enumerate(pricefile))):
+	pcf[price.key()] = pcf.get(price.key(), 0) + 1
+	pcf_prodloc[price.keys()] = pcf_prodloc.get(price.keys(), 0) + 1
+
+printSeparater("Sorting price count result...")
+sorted_pcf = sorted(pcf.items(), key=operator.itemgetter(0))
+sorted_pcf_prodloc = sorted(pcf_prodloc.items(), key=operator.itemgetter(0))
+
+printSeparater("Comparing the cost and price at product level...")
 diffCostPrice(sorted_ccf, sorted_pcf)
 
 
-printSeparater("Going to compare the cost and price at product/location level...")
-
+printSeparater("Comparing the cost and price at product/location level...")
 diffCostPrice(sorted_ccf_prodloc, sorted_pcf_prodloc)
 
+print "completed at %s" % datetime.datetime.now()
+print "completed in %.2fs" % timer.total()
 
-
-
+# main ends
 
 def main(options, paths, makeLine, sortingFields):
     out_result = sys.stdout
