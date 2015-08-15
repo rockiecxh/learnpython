@@ -91,7 +91,7 @@ tl=[(x,y,z) for x in states[0::2] for y in states[1::2] for z in states[2::2]]
 for x in tl:
     print x
 # get all the indexes of (0,2,4,6,...)
-indexes=[x*2+offset for x in range(len(states)/2) if x*2+2 < len(states)]
+indexes=[x*2+offset for x in range(len(states)/2) if x*2+2 < len(states) - offset]
 print "indexes: %s" % indexes
 
 result=[]
