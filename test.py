@@ -100,8 +100,8 @@ for x in indexes:
     result.append((states[x], states[x+1], states[x+2]))
     print result
 
-for x in result:
-    print x
+for (x, y, z) in result:
+    print "x:%s, y:%s, z:%s)" % (x, y, z)
 
 tl=[(x,y,z) for x in states[0::2] for y in states[1::2] for z in states[2::2]]
 for x in tl:
